@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+psycopg2-binary
+PyMySQL
+SQLAlchemy
+httpx
+pydantic
+python-multipart
+cors
+fastapi-cors
