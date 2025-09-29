@@ -1,15 +1,22 @@
 @import "tailwindcss";
 
-@import "tailwindcss/preflight";
-@tailwind utilities;
+/* Variables CSS personalizadas */
+@theme {
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  
+  --animate-spin: spin 1s linear infinite;
+  --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-bounce-slow: bounce 2s infinite;
+}
 
-
-/* Estilos personalizados */
+/* Estilos base */
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  width: 100%;
+  min-height: 100vh;
 }
 
 /* Animaciones personalizadas */
@@ -24,36 +31,127 @@
   }
 }
 
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes check {
+  0% {
+    transform: scale(0);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes successPulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes loading-pulse {
+  0%, 80%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Clases de utilidad personalizadas */
 .fade-in {
   animation: fadeIn 0.3s ease-in-out;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.slide-in-up {
+  animation: slideInUp 0.3s ease-out forwards;
+}
+
+.animate-check {
+  animation: check 0.5s ease-out forwards;
+}
+
+.success-pulse {
+  animation: successPulse 0.6s ease-in-out;
+}
+
+.chat-message {
+  opacity: 0;
+  animation: slideInUp 0.3s ease-out forwards;
 }
 
 /* Scrollbar personalizado */
 ::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: rgb(241 245 249);
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: rgb(203 213 225);
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: rgb(148 163 184);
 }
 
-/* Estilos para tablas responsivas */
-.table-container {
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(203 213 225) rgb(241 245 249);
+}
+
+/* Estilos para código SQL */
+.sql-code {
+  background-color: rgb(30 41 59);
+  color: rgb(16 185 129);
+  font-family: "Monaco", "Menlo", "Ubuntu Mono", "Courier New", monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  padding: 1rem;
+  border-radius: 0.5rem;
   overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
 }
 
-/* Animación de puntos de carga */
+/* Efectos de hover mejorados */
+.hover-lift {
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+/* Loading dots */
 .loading-dots {
   display: inline-flex;
   align-items: center;
@@ -80,39 +178,18 @@
   animation-delay: 0.4s;
 }
 
-@keyframes loading-pulse {
-  0%,
-  80%,
-  100% {
-    transform: scale(0.8);
-    opacity: 0.5;
-  }
-  40% {
-    transform: scale(1);
-    opacity: 1;
-  }
+/* Focus states mejorados */
+.focus-ring:focus {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+  border-color: rgb(59 130 246);
 }
 
-/* Estilos para código SQL */
-.sql-code {
-  background-color: #1e293b;
-  color: #10b981;
-  font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
-  font-size: 0.875rem;
-  line-height: 1.5;
-  padding: 1rem;
-  border-radius: 0.5rem;
+/* Estilos para tablas responsivas */
+.table-container {
   overflow-x: auto;
-}
-
-/* Efectos de hover mejorados */
-.hover-lift {
-  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-}
-
-.hover-lift:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Gradientes personalizados */
@@ -127,44 +204,6 @@
   background-clip: text;
 }
 
-/* Estilos para mensajes de chat */
-.chat-message {
-  opacity: 0;
-  animation: slideInUp 0.3s ease-out forwards;
-}
-
-@keyframes slideInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Estilos para conexión de base de datos */
-.connection-status {
-  transition: all 0.3s ease-in-out;
-}
-
-.connection-success {
-  animation: successPulse 0.6s ease-in-out;
-}
-
-@keyframes successPulse {
-  0% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.05);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
 /* Responsive improvements */
 @media (max-width: 768px) {
   .table-container {
@@ -175,13 +214,4 @@
     font-size: 0.75rem;
     padding: 0.75rem;
   }
-}
-
-/* Focus states mejorados */
-.focus-ring:focus {
-  outline: none;
-  ring-width: 2px;
-  ring-color: #3b82f6;
-  ring-opacity: 0.5;
-  border-color: #3b82f6;
 }

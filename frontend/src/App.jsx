@@ -36,13 +36,28 @@ function App() {
   };
 
   const getStepClass = (status) => {
+    const baseClasses = "w-12 h-12 rounded-full flex items-center justify-center font-semibold mb-2 transition-all duration-300";
+    
     switch (status) {
       case "completed":
-        return "bg-green-500 text-white shadow-lg";
+        return `${baseClasses} bg-green-500 text-white shadow-lg`;
       case "active":
-        return "bg-blue-500 text-white shadow-lg animate-pulse";
+        return `${baseClasses} bg-blue-500 text-white shadow-lg animate-pulse`;
       default:
-        return "bg-gray-300 text-gray-500";
+        return `${baseClasses} bg-gray-300 text-gray-500`;
+    }
+  };
+
+  const getStepTextClass = (status) => {
+    const baseClasses = "text-sm font-medium transition-colors";
+    
+    switch (status) {
+      case "active":
+        return `${baseClasses} text-blue-600`;
+      case "completed":
+        return `${baseClasses} text-green-600`;
+      default:
+        return `${baseClasses} text-gray-500`;
     }
   };
 
@@ -89,7 +104,7 @@ function App() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Progress Steps */}
         <div className="mb-8">
-          <div className="flex items-center justify-center space-x-8">
+          <div className="flex items-center justify-center space-x-4 sm:space-x-8">
             {[
               { number: 1, title: "Conectar BD", icon: Database },
               { number: 2, title: "Ver Esquema", icon: MessageSquare },
@@ -99,21 +114,10 @@ function App() {
               const status = getStepStatus(number);
               return (
                 <div key={number} className="flex flex-col items-center">
-                  <div
-                    className={`w-12 h-12 rounded-full flex items-center justify-center font-semibold mb-2 transition-all duration-300 ${getStepClass(
-                      status
-                    )} ${status === "completed" ? "animate-check" : ""}`}
-                  >
+                  <div className={getStepClass(status)}>
                     {status === "completed" ? <Icon size={20} /> : number}
                   </div>
-                  <span
-                    className={`text-sm font-medium transition-colors ${status === "active"
-                      ? "text-blue-600"
-                      : status === "completed"
-                        ? "text-green-600"
-                        : "text-gray-500"
-                      }`}
-                  >
+                  <span className={getStepTextClass(status)}>
                     {title}
                   </span>
                 </div>
@@ -169,7 +173,7 @@ function App() {
                   <div className="space-y-3 text-sm">
                     <div className="flex justify-between items-center p-2 bg-gray-50 rounded-lg">
                       <span className="text-gray-600">Base de Datos:</span>
-                      <span className="font-medium text-blue-600">
+                      <span className="font-medium text-blue-600 break-all text-right ml-2">
                         {databaseConnection?.database}
                       </span>
                     </div>
@@ -187,7 +191,7 @@ function App() {
                     </div>
                     <div className="flex justify-between items-center p-2 bg-gray-50 rounded-lg">
                       <span className="text-gray-600">Modelo IA:</span>
-                      <span className="font-medium text-xs text-orange-600">
+                      <span className="font-medium text-xs text-orange-600 break-all text-right ml-2">
                         {selectedModel}
                       </span>
                     </div>
@@ -224,19 +228,19 @@ function App() {
                   </h3>
                   <ul className="space-y-2 text-sm text-blue-700">
                     <li className="flex items-start gap-2">
-                      <span className="text-blue-500 mt-1">•</span>
+                      <span className="text-blue-500 mt-1 flex-shrink-0">•</span>
                       <span>Usa preguntas naturales y específicas</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-blue-500 mt-1">•</span>
+                      <span className="text-blue-500 mt-1 flex-shrink-0">•</span>
                       <span>Menciona nombres de tablas si las conoces</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-blue-500 mt-1">•</span>
+                      <span className="text-blue-500 mt-1 flex-shrink-0">•</span>
                       <span>Pide ordenamiento (mejores, peores, top 10)</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-blue-500 mt-1">•</span>
+                      <span className="text-blue-500 mt-1 flex-shrink-0">•</span>
                       <span>Usa fechas y rangos para filtrar datos</span>
                     </li>
                   </ul>
