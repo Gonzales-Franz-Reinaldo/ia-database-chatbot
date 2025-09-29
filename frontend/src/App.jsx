@@ -61,6 +61,14 @@ function App() {
     }
   };
 
+  // Definir los steps fuera del map para evitar warning
+  const steps = [
+    { number: 1, title: "Conectar BD", icon: Database },
+    { number: 2, title: "Ver Esquema", icon: MessageSquare },
+    { number: 3, title: "Seleccionar IA", icon: Brain },
+    { number: 4, title: "Chatbot", icon: MessageSquare },
+  ];
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       {/* Header */}
@@ -105,17 +113,12 @@ function App() {
         {/* Progress Steps */}
         <div className="mb-8">
           <div className="flex items-center justify-center space-x-4 sm:space-x-8">
-            {[
-              { number: 1, title: "Conectar BD", icon: Database },
-              { number: 2, title: "Ver Esquema", icon: MessageSquare },
-              { number: 3, title: "Seleccionar IA", icon: Brain },
-              { number: 4, title: "Chatbot", icon: MessageSquare },
-            ].map(({ number, title, icon: Icon }) => {
+            {steps.map(({ number, title, icon: StepIcon }) => {
               const status = getStepStatus(number);
               return (
                 <div key={number} className="flex flex-col items-center">
                   <div className={getStepClass(status)}>
-                    {status === "completed" ? <Icon size={20} /> : number}
+                    {status === "completed" ? <StepIcon size={20} /> : number}
                   </div>
                   <span className={getStepTextClass(status)}>
                     {title}
@@ -147,6 +150,8 @@ function App() {
             <ModelSelector
               selectedModel={selectedModel}
               onModelChange={handleModelChange}
+              databaseConnection={databaseConnection}
+              schema={schema}
             />
           )}
 

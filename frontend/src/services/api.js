@@ -98,6 +98,19 @@ export const apiService = {
         } catch (error) {
             throw new Error('Error en verificación de salud: ' + error.message);
         }
+    },
+
+    // Hacer que el modelo aprenda la base de datos
+    async learnDatabase(connectionData, selectedModel) {
+        try {
+            const response = await api.post('/learn-database', {
+                ...connectionData,
+                selected_model: selectedModel
+            });
+            return response.data;
+        } catch (error) {
+            throw new Error('Error en aprendizaje de BD: ' + error.message);
+        }
     }
 };
 

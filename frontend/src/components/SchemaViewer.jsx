@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Table, Columns, Key, Link, Eye, Loader2, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Table, Columns, Key, Link, Eye, Loader2, RefreshCw, ChevronDown, ChevronUp, XCircle } from 'lucide-react';
 import { apiService } from '../services/api';
 
 const SchemaViewer = ({ databaseConnection, onSchemaLoaded }) => {
@@ -21,13 +21,19 @@ const SchemaViewer = ({ databaseConnection, onSchemaLoaded }) => {
         setError(null);
 
         try {
-            const schemaData = await apiService.analyzeDatabaseSchema(databaseConnection);
-            setSchema(schemaData);
-            onSchemaLoaded(schemaData);
+            const response = await apiService.analyzeDatabaseSchema(databaseConnection);
             
-            // Expandir la primera tabla por defecto
-            if (schemaData.tables.length > 0) {
-                setExpandedTables({ [schemaData.tables[0].table_name]: true });
+            if (response.success) {
+                const schemaData = response.schema;
+                setSchema(schemaData);
+                onSchemaLoaded(schemaData);
+                
+                // Expandir la primera tabla por defecto
+                if (schemaData.tables.length > 0) {
+                    setExpandedTables({ [schemaData.tables[0].table_name]: true });
+                }
+            } else {
+                setError(response.message || 'Error desconocido al analizar esquema');
             }
         } catch (err) {
             setError(err.message);

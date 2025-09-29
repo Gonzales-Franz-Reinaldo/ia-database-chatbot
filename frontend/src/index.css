@@ -1,14 +1,27 @@
 @import "tailwindcss";
 
-/* Reset y configuración base */
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+/* Configuración de tema para Tailwind v4 */
+@theme {
+  /* Colores personalizados */
+  --color-primary-50: oklch(0.97 0.013 231.8);
+  --color-primary-100: oklch(0.93 0.041 231.8);
+  --color-primary-500: oklch(0.64 0.188 231.8);
+  --color-primary-600: oklch(0.57 0.196 231.8);
+  --color-primary-700: oklch(0.50 0.189 231.8);
+  
+  /* Animaciones personalizadas */
+  --animate-spin: spin 1s linear infinite;
+  --animate-pulse: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-bounce: bounce 1s infinite;
+  
+  /* Espaciado personalizado */
+  --spacing-18: 4.5rem;
+  --spacing-72: 18rem;
+  --spacing-84: 21rem;
+  --spacing-96: 24rem;
 }
 
+/* Configuración base */
 html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -21,10 +34,7 @@ body {
     "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #f0f4ff 100%);
-  min-height: 100vh;
   line-height: 1.5;
-  color: rgb(17 24 39);
 }
 
 #root {
