@@ -53,14 +53,19 @@ class OllamaService:
                                 sample_data: Dict[str, list] = None) -> Dict[str, Any]:
         """Generar consulta SQL usando Ollama con contexto mejorado de la BD"""
         try:
-            # Crear contexto enriquecido del esquema y datos
-            enhanced_context = await self._create_enhanced_context(schema, sample_data)
+            print(f"🔍 [DEBUG] Generando SQL para: {message}")
+            print(f"🤖 [DEBUG] Usando modelo: {model}")
+            print(f"📊 [DEBUG] Base de datos: {schema.database_name}")
             
-            # Crear prompt optimizado con RAG avanzado
-            prompt = self._create_advanced_sql_prompt(enhanced_context, message, schema.database_name)
+            # Usar prompt simple y directo para mejor compatibilidad
+            prompt = self._create_simple_sql_prompt(schema, message)
+            
+            print(f"📝 [DEBUG] Longitud del prompt: {len(prompt)} caracteres")
             
             # Llamar a Ollama con configuración optimizada
-            async with httpx.AsyncClient(timeout=90.0) as client:
+            async with httpx.AsyncClient(timeout=900.0) as client:
+                print(f"🌐 [DEBUG] Enviando request a Ollama...")
+                
                 response = await client.post(
                     f"{self.base_url}/api/generate",
                     json={
@@ -72,30 +77,47 @@ class OllamaService:
                             "top_p": 0.8,
                             "top_k": 20,
                             "repeat_penalty": 1.1,
-                            "num_predict": 1000
+                            "num_predict": 2000  # Más tokens para respuestas completas
                         }
                     }
                 )
+                
+                print(f"🔄 [DEBUG] Response status: {response.status_code}")
                 
                 if response.status_code == 200:
                     result = response.json()
                     ai_response = result.get("response", "")
                     
+                    print(f"✅ [DEBUG] Respuesta recibida ({len(ai_response)} chars)")
+                    print(f"📄 [DEBUG] Primeros 200 chars: {ai_response[:200]}...")
+                    
                     # Extraer SQL y explicación con mejor precisión
                     sql_query = self._extract_sql_query(ai_response)
                     explanation = self._extract_explanation(ai_response)
                     
-                    # Validar la consulta SQL
-                    if sql_query:
-                        validation_result = self._validate_sql_query(sql_query, schema)
-                        if not validation_result["valid"]:
-                            return {
-                                "success": False,
-                                "error": f"Consulta SQL inválida: {validation_result['error']}",
-                                "sql_query": sql_query,
-                                "explanation": explanation
-                            }
+                    print(f"🔍 [DEBUG] SQL extraído: {sql_query}")
+                    print(f"💭 [DEBUG] Explicación extraída: {explanation}")
                     
+                    if not sql_query:
+                        print(f"❌ [DEBUG] No se pudo extraer SQL de la respuesta")
+                        return {
+                            "success": False,
+                            "error": "No se pudo extraer consulta SQL de la respuesta",
+                            "full_response": ai_response
+                        }
+                    
+                    # Validar la consulta SQL
+                    validation_result = self._validate_sql_query(sql_query, schema)
+                    if not validation_result["valid"]:
+                        print(f"❌ [DEBUG] SQL inválido: {validation_result['error']}")
+                        return {
+                            "success": False,
+                            "error": f"Consulta SQL inválida: {validation_result['error']}",
+                            "sql_query": sql_query,
+                            "explanation": explanation
+                        }
+                    
+                    print(f"✅ [DEBUG] SQL válido, devolviendo resultado")
                     return {
                         "success": True,
                         "sql_query": sql_query,
@@ -103,12 +125,17 @@ class OllamaService:
                         "full_response": ai_response
                     }
                 else:
+                    error_text = response.text
+                    print(f"❌ [DEBUG] Error HTTP {response.status_code}: {error_text}")
                     return {
                         "success": False,
-                        "error": f"Error en Ollama: {response.status_code} - {response.text}"
+                        "error": f"Error en Ollama: {response.status_code} - {error_text}"
                     }
         
         except Exception as e:
+            print(f"💥 [DEBUG] Excepción: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return {
                 "success": False,
                 "error": f"Error al generar consulta SQL: {str(e)}"
@@ -181,27 +208,39 @@ EXPLICACIÓN: [explicación detallada de la consulta]
 ## RESPUESTA:"""
     
     def _extract_sql_query(self, response: str) -> Optional[str]:
-        """Extraer consulta SQL de la respuesta de la IA"""
-        # Buscar patrón SQL:
-        sql_match = re.search(r'SQL:\s*(.*?)(?=EXPLICACIÓN:|$)', response, re.IGNORECASE | re.DOTALL)
-        if sql_match:
-            sql = sql_match.group(1).strip()
-            # Limpiar SQL
-            sql = re.sub(r'^```sql\s*', '', sql)
-            sql = re.sub(r'\s*```$', '', sql)
-            sql = sql.strip()
-            return sql if sql else None
+        """Extraer consulta SQL de la respuesta de la IA con múltiples patrones"""
+        print(f"🔍 [DEBUG] Extrayendo SQL de respuesta de {len(response)} caracteres")
         
-        # Buscar SQL entre ```
-        code_match = re.search(r'```(?:sql)?\s*(SELECT.*?)```', response, re.IGNORECASE | re.DOTALL)
-        if code_match:
-            return code_match.group(1).strip()
+        patterns = [
+            # Patrón 1: SQL: seguido de consulta hasta nueva línea o EXPLICACIÓN
+            r'SQL:\s*(SELECT[^\r\n]*(?:;)?)',
+            # Patrón 2: SELECT en bloque de código
+            r'```(?:sql)?\s*(SELECT.*?)```',
+            # Patrón 3: SELECT en una línea completa
+            r'^\s*(SELECT[^\r\n]*(?:;)?)\s*$',
+            # Patrón 4: SELECT hasta punto y coma
+            r'(SELECT[^;]*);',
+            # Patrón 5: SELECT hasta salto de línea
+            r'(SELECT[^\r\n]*)',
+        ]
         
-        # Buscar SELECT directamente
-        select_match = re.search(r'(SELECT.*?);?$', response, re.IGNORECASE | re.DOTALL)
-        if select_match:
-            return select_match.group(1).strip()
+        for i, pattern in enumerate(patterns, 1):
+            matches = re.findall(pattern, response, re.IGNORECASE | re.DOTALL)
+            if matches:
+                for match in matches:
+                    sql = match.strip() if isinstance(match, str) else match
+                    # Limpiar SQL
+                    sql = re.sub(r'^```sql\s*', '', sql, flags=re.IGNORECASE)
+                    sql = re.sub(r'\s*```$', '', sql)
+                    sql = sql.strip()
+                    
+                    # Validar que sea una consulta SQL válida
+                    if sql and sql.upper().startswith('SELECT') and len(sql) > 10:
+                        print(f"✅ [DEBUG] SQL encontrado con patrón {i}: {sql[:100]}...")
+                        return sql
         
+        print(f"❌ [DEBUG] No se encontró SQL válido en la respuesta")
+        print(f"📄 [DEBUG] Respuesta completa: {response}")
         return None
     
     async def _create_enhanced_context(self, schema: DatabaseSchema, sample_data: Dict[str, list] = None) -> str:
@@ -261,40 +300,59 @@ EXPLICACIÓN: [explicación detallada de la consulta]
         return context
     
     def _create_advanced_sql_prompt(self, enhanced_context: str, user_message: str, db_name: str) -> str:
-        """Crear prompt avanzado para generación de SQL con máxima precisión"""
-        return f"""{enhanced_context}
+        """Crear prompt simple y directo para generación de SQL"""
+        
+        # Extraer solo la información esencial de tablas
+        simple_schema = ""
+        for table in self.schema.tables if hasattr(self, 'schema') else []:
+            simple_schema += f"Tabla {table.table_name}: "
+            columns = [col['name'] for col in table.columns]
+            simple_schema += ", ".join(columns) + "\n"
+        
+        return f"""Tienes acceso a la base de datos {db_name} con estas tablas:
 
-# 🎯 INSTRUCCIONES PARA CONSULTA SQL EXPERTA
+{enhanced_context}
 
-Eres un **EXPERTO EN BASES DE DATOS** con conocimiento completo de la BD `{db_name}`.
-Tu misión es generar consultas SQL **PERFECTAS** y **EFICIENTES**.
+Pregunta del usuario: {user_message}
 
-## 🚨 REGLAS CRÍTICAS (OBLIGATORIAS):
-✅ **SOLO SELECT** - Jamás INSERT, UPDATE, DELETE, DROP, ALTER, etc.
-✅ **NOMBRES EXACTOS** - Usa solo tablas y columnas que existen en el esquema
-✅ **SINTAXIS CORRECTA** - SQL válido para PostgreSQL/MySQL
-✅ **CASE SENSITIVE** - Respeta mayúsculas/minúsculas exactas
-✅ **JOINS CORRECTOS** - Usa las foreign keys mostradas arriba
-✅ **PERFORMANCE** - Optimiza para velocidad
+Genera SOLO una consulta SQL SELECT válida para responder la pregunta. 
+Usa los nombres exactos de tablas y columnas mostrados arriba.
 
-## 🎪 PATRONES INTELIGENTES:
-- **"mejores/top N"** → `ORDER BY columna DESC LIMIT N`
-- **"peores/bottom N"** → `ORDER BY columna ASC LIMIT N`
-- **"cuántos"** → `SELECT COUNT(*) FROM tabla WHERE...`
-- **"promedio"** → `SELECT AVG(columna) FROM tabla`
-- **"total/suma"** → `SELECT SUM(columna) FROM tabla`
-- **"por categoría/grupo"** → `GROUP BY columna`
-- **"entre fechas"** → `WHERE fecha BETWEEN 'fecha1' AND 'fecha2'`
-- **"contiene texto"** → `WHERE columna LIKE '%texto%'`
+Formato de respuesta requerido:
+SQL: [consulta SELECT aquí]
+EXPLICACIÓN: [explicación corta]
 
-## 💡 CONTEXTO DE LA CONSULTA:
-**Pregunta del usuario:** {user_message}
+Respuesta:"""
+    
+    def _create_simple_sql_prompt(self, schema: DatabaseSchema, user_message: str) -> str:
+        """Crear prompt muy simple y directo"""
+        
+        # Información básica del esquema
+        schema_info = f"Base de datos: {schema.database_name}\n\nTablas disponibles:\n"
+        
+        for table in schema.tables:
+            schema_info += f"\nTabla '{table.table_name}':\n"
+            for col in table.columns:
+                schema_info += f"  - {col['name']} ({col['type']})"
+                if col['name'] in table.primary_keys:
+                    schema_info += " [PK]"
+                schema_info += "\n"
+            
+            if table.foreign_keys:
+                for fk in table.foreign_keys:
+                    schema_info += f"  - {fk['column']} -> {fk['referenced_table']}.{fk['referenced_column']}\n"
+        
+        return f"""{schema_info}
 
-## ⚡ FORMATO DE RESPUESTA OBLIGATORIO:
-SQL: [tu consulta sql aquí - una sola línea o con saltos lógicos]
-EXPLICACIÓN: [explicación clara y detallada en español]
+Pregunta: {user_message}
 
-## 🔍 ANÁLISIS Y RESPUESTA:"""
+Genera una consulta SQL SELECT para responder esta pregunta.
+Usa solo los nombres de tablas y columnas mostrados arriba.
+Responde en este formato exacto:
+
+SQL: SELECT ...
+EXPLICACIÓN: Esta consulta...
+"""
     
     def _validate_sql_query(self, sql_query: str, schema: DatabaseSchema) -> Dict[str, Any]:
         """Validar consulta SQL contra el esquema"""

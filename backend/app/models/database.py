@@ -40,3 +40,7 @@ class OllamaModel(BaseModel):
     name: str
     size: str
     modified_at: str
+
+class LearnDatabaseRequest(BaseModel):
+    database_connection: DatabaseConnection
+    selected_model: str

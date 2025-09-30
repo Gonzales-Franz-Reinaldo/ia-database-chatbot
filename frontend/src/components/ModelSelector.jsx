@@ -89,7 +89,10 @@ const ModelSelector = ({ selectedModel, onModelChange, databaseConnection, schem
         }
 
         setIsLearning(true);
-        setLearningStatus({ type: 'loading', message: 'El modelo está aprendiendo la base de datos...' });
+        setLearningStatus({ 
+            type: 'loading', 
+            message: 'El modelo está aprendiendo la estructura de la base de datos (esquema, tablas, columnas y relaciones). Optimizado para ser rápido y preciso...' 
+        });
 
         try {
             const result = await apiService.learnDatabase(databaseConnection, selectedModel);
@@ -286,9 +289,13 @@ const ModelSelector = ({ selectedModel, onModelChange, databaseConnection, schem
                                 </button>
                             </div>
                             
-                            <p className="text-purple-700 text-sm mb-3">
-                                Haz que el modelo aprenda completamente tu base de datos para generar mejores consultas SQL.
-                            </p>
+                            <div className="text-purple-700 text-sm mb-3 space-y-2">
+                                <p>Entrena el modelo con la estructura completa de tu base de datos (esquema, tablas, columnas y relaciones).</p>
+                                <p className="text-xs text-purple-600 bg-purple-100 p-2 rounded flex items-center gap-2">
+                                    <span>⚡</span>
+                                    <span><strong>Optimizado:</strong> Solo aprende la estructura de la BD (NO registros). Debería tardar 1-3 minutos para tamaño normal.</span>
+                                </p>
+                            </div>
                             
                             {learningStatus && (
                                 <div className={`p-3 rounded-lg border ${

@@ -8,7 +8,7 @@ const api = axios.create({
     headers: {
         'Content-Type': 'application/json',
     },
-    timeout: 60000, // 60 segundos para consultas que pueden tardar
+    timeout: 1500000, // 25 minutos para todas las operaciones
 });
 
 // Interceptor para manejar errores globalmente
@@ -103,12 +103,24 @@ export const apiService = {
     // Hacer que el modelo aprenda la base de datos
     async learnDatabase(connectionData, selectedModel) {
         try {
-            const response = await api.post('/learn-database', {
-                ...connectionData,
+            // Crear una instancia de axios con timeout extendido para aprendizaje
+            const learningApi = axios.create({
+                baseURL: API_BASE_URL,
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                timeout: 1500000, // 25 minutos para aprendizaje
+            });
+
+            const response = await learningApi.post('/learn-database', {
+                database_connection: connectionData,
                 selected_model: selectedModel
             });
             return response.data;
         } catch (error) {
+            if (error.code === 'ECONNABORTED') {
+                throw new Error('El aprendizaje está tardando más de lo esperado. Esto puede ser normal para bases de datos grandes o modelos complejos.');
+            }
             throw new Error('Error en aprendizaje de BD: ' + error.message);
         }
     }

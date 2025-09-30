@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from typing import List
 from app.models.database import (
-    DatabaseConnection, DatabaseSchema, ChatMessage, QueryResult, OllamaModel
+    DatabaseConnection, DatabaseSchema, ChatMessage, QueryResult, OllamaModel, LearnDatabaseRequest
 )
 from app.services.schema_analyzer import SchemaAnalyzer
 from app.services.database_service import DatabaseService
@@ -99,10 +99,10 @@ async def process_chat_message(chat_request: ChatMessage):
         db_service = DatabaseService(chat_request.database_connection)
         sample_data = {}
         
-        # Obtener hasta 3 filas de muestra de cada tabla (para contexto)
+        # Obtener datos completos de muestra de cada tabla (para contexto)
         for table in schema.tables:
             try:
-                result = db_service.get_sample_data(table.table_name, limit=3)
+                result = db_service.get_sample_data(table.table_name, limit=100)  # Solo ejemplos para contexto
                 if result["success"] and result["data"]:
                     sample_data[table.table_name] = result["data"]
             except Exception:
@@ -169,12 +169,77 @@ async def execute_sql_query(db_connection: DatabaseConnection, sql_query: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al ejecutar consulta: {str(e)}")
 
+async def create_optimized_learning_prompt(schema, learning_data):
+    """Crear un prompt enfocado SOLO en estructura y esquema de la base de datos"""
+    
+    prompt = f"""Eres un experto generador de consultas SQL. Te proporciono la ESTRUCTURA COMPLETA de la base de datos '{schema.database_name}' para que puedas generar consultas SQL precisas.
+
+# 📊 BASE DE DATOS: {schema.database_name}
+
+## 🏗️ ESQUEMA Y ESTRUCTURA:
+"""
+    
+    # Solo estructura esencial - SIN registros masivos
+    for table in schema.tables:
+        prompt += f"\n### 📋 TABLA: {table.table_name}\n"
+        
+        # Columnas con información esencial
+        prompt += "**COLUMNAS:**\n"
+        for col in table.columns:
+            col_info = f"  • {col['name']} ({col['type']})"
+            if col['name'] in table.primary_keys:
+                col_info += " [PK]"
+            if not col['nullable']:
+                col_info += " [NOT NULL]"
+            if col.get('default'):
+                col_info += f" [DEFAULT: {col['default']}]"
+            prompt += col_info + "\n"
+        
+        # Relaciones entre tablas
+        if table.foreign_keys:
+            prompt += "\n**RELACIONES:**\n"
+            for fk in table.foreign_keys:
+                prompt += f"  • {fk['column']} → {fk['referenced_table']}.{fk['referenced_column']}\n"
+        
+        # Solo 2-3 ejemplos para entender formato (NO datos masivos)
+        if table.table_name in learning_data and learning_data[table.table_name]:
+            prompt += f"\n**FORMATO DE DATOS (ejemplo):**\n"
+            for i, record in enumerate(learning_data[table.table_name][:2]):  # Solo 2 ejemplos
+                example_values = []
+                for key, value in record.items():
+                    if isinstance(value, str):
+                        example_values.append(f"'{value}'")
+                    else:
+                        example_values.append(str(value))
+                prompt += f"  Ejemplo {i+1}: ({', '.join(example_values)})\n"
+        
+        prompt += "\n" + "-"*50 + "\n"
+    
+    # Instrucciones claras y concisas
+    prompt += f"""
+## ✅ RESUMEN:
+- Base de datos: {schema.database_name}
+- Tablas disponibles: {len(schema.tables)}
+- Tu función: Generar consultas SQL precisas usando esta estructura
+
+## 🎯 IMPORTANTE:
+Cuando recibas preguntas:
+1. Usa nombres EXACTOS de tablas y columnas mostradas arriba
+2. Respeta las relaciones entre tablas (FK)
+3. Genera SOLO consultas SELECT válidas
+4. Los datos reales vendrán de la ejecución de la consulta
+
+Responde únicamente: "ESTRUCTURA MEMORIZADA - Listo para generar consultas SQL para {schema.database_name} con {len(schema.tables)} tablas."
+"""
+    
+    return prompt
+
 @router.post("/learn-database")
-async def learn_database(db_connection: DatabaseConnection, selected_model: str):
+async def learn_database(request: LearnDatabaseRequest):
     """Hacer que el modelo de IA aprenda la base de datos completamente"""
     try:
         # 1. Analizar esquema completo
-        analyzer = SchemaAnalyzer(db_connection)
+        analyzer = SchemaAnalyzer(request.database_connection)
         if not analyzer.test_connection():
             return {
                 "success": False,
@@ -184,51 +249,35 @@ async def learn_database(db_connection: DatabaseConnection, selected_model: str)
         schema = analyzer.analyze_schema()
         
         # 2. Obtener muestras de datos de todas las tablas
-        db_service = DatabaseService(db_connection)
+        db_service = DatabaseService(request.database_connection)
         learning_data = {}
         
         for table in schema.tables:
             try:
-                # Obtener más muestras para el aprendizaje completo
-                result = db_service.get_sample_data(table.table_name, limit=10)
+                # Solo obtener 2-3 registros de ejemplo para entender estructura
+                result = db_service.get_sample_data(table.table_name, limit=2)  # Solo ejemplos mínimos
                 if result["success"] and result["data"]:
                     learning_data[table.table_name] = result["data"]
             except Exception as e:
                 learning_data[table.table_name] = []
         
-        # 3. Crear prompt de aprendizaje para el modelo
-        learning_prompt = f"""# 🎓 APRENDIZAJE COMPLETO DE BASE DE DATOS
-        
-Analiza completamente esta base de datos y aprende todos sus patrones, estructuras y datos.
-Después de este análisis, serás capaz de generar consultas SQL perfectas para cualquier pregunta.
-        
-## BASE DE DATOS: {schema.database_name}
-        
-{await ollama_service._create_enhanced_context(schema, learning_data)}
-        
-## INSTRUCCIONES DE APRENDIZAJE:
-1. Memoriza todas las tablas, columnas y tipos de datos
-2. Entiende todas las relaciones entre tablas
-3. Aprende los patrones de datos mostrados en las muestras
-4. Identifica las mejores estrategias de consulta para cada tabla
-5. Reconoce los tipos de preguntas más comunes para estos datos
-        
-## CONFIRMACIÓN:
-Responde con "BASE DE DATOS APRENDIDA" si has procesado toda la información correctamente.
-Incluye un breve resumen de lo que has aprendido."""
+        # 3. Crear prompt de aprendizaje optimizado
+        learning_prompt = await create_optimized_learning_prompt(schema, learning_data)
         
         # 4. Enviar al modelo para aprendizaje
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=1000.0) as client:
             response = await client.post(
                 f"{ollama_service.base_url}/api/generate",
                 json={
-                    "model": selected_model,
+                    "model": request.selected_model,
                     "prompt": learning_prompt,
                     "stream": False,
                     "options": {
                         "temperature": 0.1,
-                        "top_p": 0.9,
-                        "num_predict": 2000
+                        "top_p": 0.8,
+                        "num_predict": 1000,  # Respuesta corta esperada
+                        "repeat_penalty": 1.1
+                        # Sin stop tokens para permitir respuesta completa
                     }
                 }
             )
