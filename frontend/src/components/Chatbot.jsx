@@ -336,7 +336,7 @@ const Chatbot = ({ databaseConnection, schema, selectedModel, onDisconnect }) =>
     }
 
     return (
-        <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-lg flex flex-col h-[700px] border border-gray-200/50 overflow-hidden">
+        <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-lg flex flex-col h-[800px] border border-gray-200/50 overflow-hidden">
             {/* Header */}
             <div className="border-b border-gray-200/50 p-4 bg-gradient-to-r from-white to-gray-50">
                 <div className="flex items-center justify-between">

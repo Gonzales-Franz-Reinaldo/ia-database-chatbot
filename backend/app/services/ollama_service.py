@@ -64,7 +64,7 @@ class OllamaService:
             print(f"📝 [DEBUG] Longitud del prompt: {len(prompt)} caracteres")
             
             # Llamar a Ollama con configuración optimizada
-            async with httpx.AsyncClient(timeout=900.0) as client:
+            async with httpx.AsyncClient(timeout=1000.0) as client:
                 print(f"🌐 [DEBUG] Enviando request a Ollama...")
                 
                 response = await client.post(
@@ -78,7 +78,7 @@ class OllamaService:
                             "top_p": 0.8,
                             "top_k": 20,
                             "repeat_penalty": 1.1,
-                            "num_predict": 2000  # Más tokens para respuestas completas
+                            "num_predict": 5000  # Más tokens para respuestas completas
                         }
                     }
                 )
@@ -191,6 +191,7 @@ Eres un experto en bases de datos con acceso completo al esquema. Tu trabajo es:
 - ✅ Para promedios, usa AVG()
 - ✅ Para búsquedas, usa WHERE con LIKE o =
 - ✅ Para agrupaciones, usa GROUP BY
+- ✅ Y otras funciones SQL estándar según la pregunta
 
 ## PATRONES COMUNES:
 - "mejores X" → ORDER BY X DESC LIMIT N
@@ -452,10 +453,13 @@ EXPLICACIÓN: [explica brevemente qué hace la consulta]
         if not sql_upper.startswith('SELECT'):
             return {"valid": False, "error": "Solo se permiten consultas SELECT"}
         
-        # Verificar palabras prohibidas
+        # Verificar palabras prohibidas usando word boundaries (palabras completas)
         forbidden = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'CREATE', 'ALTER', 'TRUNCATE']
         for word in forbidden:
-            if word in sql_upper:
+            # Usar regex para buscar palabra completa, no subcadena
+            # Esto evita que "created_at" active el filtro "CREATE"
+            pattern = r'\b' + word + r'\b'
+            if re.search(pattern, sql_upper):
                 return {"valid": False, "error": f"Operación prohibida: {word}"}
         
         # Verificar que las tablas existen

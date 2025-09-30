@@ -131,7 +131,7 @@ async def process_chat_message(chat_request: ChatMessage):
             chat_request.message,
             chat_request.model,
             schema,
-            sample_data=None,  # Ya no necesitamos sample_data, usamos data_profile
+            sample_data=None,  
             data_profile=data_profile
         )
         
@@ -275,7 +275,7 @@ async def learn_database(request: LearnDatabaseRequest):
         for table in schema.tables:
             try:
                 # Solo obtener 2-3 registros de ejemplo para entender estructura
-                result = db_service.get_sample_data(table.table_name, limit=2)  # Solo ejemplos mínimos
+                result = db_service.get_sample_data(table.table_name, limit=3)  # Solo ejemplos mínimos
                 if result["success"] and result["data"]:
                     learning_data[table.table_name] = result["data"]
             except Exception as e:

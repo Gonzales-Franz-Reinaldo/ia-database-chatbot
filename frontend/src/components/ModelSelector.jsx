@@ -293,7 +293,7 @@ const ModelSelector = ({ selectedModel, onModelChange, databaseConnection, schem
                                 <p>Entrena el modelo con la estructura completa de tu base de datos (esquema, tablas, columnas y relaciones).</p>
                                 <p className="text-xs text-purple-600 bg-purple-100 p-2 rounded flex items-center gap-2">
                                     <span>⚡</span>
-                                    <span><strong>Optimizado:</strong> Solo aprende la estructura de la BD (NO registros). Debería tardar 1-3 minutos para tamaño normal.</span>
+                                    <span><strong>Optimizado:</strong> Solo aprende la estructura de la BD. Debería tardar 1-3 o más minutos dependiendo del tamaño.</span>
                                 </p>
                             </div>
                             

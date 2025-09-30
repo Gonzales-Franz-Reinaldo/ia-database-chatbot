@@ -112,8 +112,11 @@ class DatabaseService:
             'MERGE', 'REPLACE', 'LOAD', 'COPY', 'BULK'
         ]
         
+        # Usar regex para buscar palabras completas, no subcadenas
+        # Esto evita que "created_at", "updated_at" activen el filtro
         for word in forbidden_words:
-            if word in cleaned_query:
+            pattern = r'\b' + word + r'\b'
+            if re.search(pattern, cleaned_query):
                 return False
         
         # Verificar que no contenga subconsultas peligrosas
