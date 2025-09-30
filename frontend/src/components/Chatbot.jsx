@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Database, Code, Copy, CheckCircle, AlertCircle, Loader2, Brain, Zap } from 'lucide-react';
+import { Send, Bot, User, Database, Code, Copy, CheckCircle, AlertCircle, Loader2, Brain, Zap, RefreshCw, Power } from 'lucide-react';
 import { apiService } from '../services/api';
 
-const Chatbot = ({ databaseConnection, schema, selectedModel }) => {
+const Chatbot = ({ databaseConnection, schema, selectedModel, onDisconnect }) => {
     const [messages, setMessages] = useState([
         {
             id: 1,
@@ -13,6 +13,8 @@ const Chatbot = ({ databaseConnection, schema, selectedModel }) => {
     ]);
     const [inputMessage, setInputMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [isDisconnecting, setIsDisconnecting] = useState(false);
     const [copiedMessageId, setCopiedMessageId] = useState(null);
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
@@ -99,6 +101,73 @@ const Chatbot = ({ databaseConnection, schema, selectedModel }) => {
             setTimeout(() => setCopiedMessageId(null), 2000);
         } catch (error) {
             console.error('Error al copiar:', error);
+        }
+    };
+
+    const handleRefreshContext = async () => {
+        setIsRefreshing(true);
+        try {
+            const result = await apiService.refreshContext(databaseConnection);
+            if (result.success) {
+                const refreshMessage = {
+                    id: Date.now(),
+                    type: 'bot',
+                    content: `✨ Contexto actualizado exitosamente. La IA ahora tiene información fresca sobre ${result.tables_analyzed} tablas de tu base de datos.`,
+                    success: true,
+                    timestamp: new Date()
+                };
+                setMessages(prev => [...prev, refreshMessage]);
+            }
+        } catch (error) {
+            const errorMessage = {
+                id: Date.now(),
+                type: 'bot',
+                content: 'Error al refrescar el contexto',
+                error: error.message,
+                success: false,
+                timestamp: new Date()
+            };
+            setMessages(prev => [...prev, errorMessage]);
+        } finally {
+            setIsRefreshing(false);
+        }
+    };
+
+    const handleDisconnect = async () => {
+        if (!window.confirm('¿Estás seguro de que deseas desconectar? Se borrará el caché y se detendrá el modelo.')) {
+            return;
+        }
+
+        setIsDisconnecting(true);
+        try {
+            // Llamar al endpoint de desconectar
+            await apiService.disconnect(databaseConnection, selectedModel);
+            
+            // Mensaje de confirmación
+            const disconnectMessage = {
+                id: Date.now(),
+                type: 'bot',
+                content: '🔌 Desconexión exitosa. El caché ha sido limpiado y el modelo detenido. Puedes volver a conectarte cuando quieras.',
+                success: true,
+                timestamp: new Date()
+            };
+            setMessages(prev => [...prev, disconnectMessage]);
+            
+            // Esperar 1 segundo para que el usuario vea el mensaje
+            setTimeout(() => {
+                onDisconnect();
+            }, 1500);
+        } catch (error) {
+            const errorMessage = {
+                id: Date.now(),
+                type: 'bot',
+                content: 'Error al desconectar',
+                error: error.message,
+                success: false,
+                timestamp: new Date()
+            };
+            setMessages(prev => [...prev, errorMessage]);
+            setIsDisconnecting(false);
         }
     };
 
@@ -267,7 +336,7 @@ const Chatbot = ({ databaseConnection, schema, selectedModel }) => {
     }
 
     return (
-        <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-lg flex flex-col h-[600px] border border-gray-200/50 overflow-hidden">
+        <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-lg flex flex-col h-[700px] border border-gray-200/50 overflow-hidden">
             {/* Header */}
             <div className="border-b border-gray-200/50 p-4 bg-gradient-to-r from-white to-gray-50">
                 <div className="flex items-center justify-between">
@@ -286,6 +355,35 @@ const Chatbot = ({ databaseConnection, schema, selectedModel }) => {
                                 {databaseConnection.database} • {selectedModel}
                             </p>
                         </div>
+                    </div>
+                    
+                    {/* Botones de Acción */}
+                    <div className="flex items-center gap-2">
+                        {/* Botón de Refrescar Contexto */}
+                        <button
+                            onClick={handleRefreshContext}
+                            disabled={isRefreshing || isLoading || isDisconnecting}
+                            className="flex items-center gap-2 px-3 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                            title="Refrescar contexto de la BD"
+                        >
+                            <RefreshCw className={isRefreshing ? 'animate-spin' : ''} size={16} />
+                            <span className="hidden lg:inline">
+                                {isRefreshing ? 'Refrescando...' : 'Refrescar'}
+                            </span>
+                        </button>
+                        
+                        {/* Botón de Desconectar */}
+                        <button
+                            onClick={handleDisconnect}
+                            disabled={isDisconnecting || isLoading}
+                            className="flex items-center gap-2 px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                            title="Desconectar y limpiar caché"
+                        >
+                            <Power className={isDisconnecting ? 'animate-pulse' : ''} size={16} />
+                            <span className="hidden lg:inline">
+                                {isDisconnecting ? 'Desconectando...' : 'Desconectar'}
+                            </span>
+                        </button>
                     </div>
                 </div>
             </div>

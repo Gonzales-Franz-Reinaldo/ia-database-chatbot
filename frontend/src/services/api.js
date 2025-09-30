@@ -123,6 +123,39 @@ export const apiService = {
             }
             throw new Error('Error en aprendizaje de BD: ' + error.message);
         }
+    },
+
+    // Refrescar el contexto de la base de datos
+    async refreshContext(connectionData) {
+        try {
+            const response = await api.post('/refresh-context', connectionData);
+            return response.data;
+        } catch (error) {
+            throw new Error('Error al refrescar contexto: ' + error.message);
+        }
+    },
+
+    // Obtener estadísticas del caché
+    async getCacheStats() {
+        try {
+            const response = await api.get('/cache-stats');
+            return response.data;
+        } catch (error) {
+            throw new Error('Error al obtener estadísticas: ' + error.message);
+        }
+    },
+
+    // Desconectar: limpiar caché y detener modelo
+    async disconnect(connectionData, modelName) {
+        try {
+            const response = await api.post('/disconnect', {
+                database_connection: connectionData,
+                model_name: modelName
+            });
+            return response.data;
+        } catch (error) {
+            throw new Error('Error al desconectar: ' + error.message);
+        }
     }
 };
 

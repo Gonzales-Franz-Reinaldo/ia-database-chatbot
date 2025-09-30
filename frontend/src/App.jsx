@@ -3,7 +3,7 @@ import DatabaseConnection from "./components/DatabaseConnection";
 import SchemaViewer from "./components/SchemaViewer";
 import ModelSelector from "./components/ModelSelector";
 import Chatbot from "./components/Chatbot";
-import { Database, Brain, MessageSquare, Github } from "lucide-react";
+import { Database, Brain, MessageSquare, Github, ChevronDown, ChevronUp } from "lucide-react";
 import "./App.css";
 
 function App() {
@@ -11,6 +11,7 @@ function App() {
   const [schema, setSchema] = useState(null);
   const [selectedModel, setSelectedModel] = useState("");
   const [activeStep, setActiveStep] = useState(1);
+  const [showCompletedSteps, setShowCompletedSteps] = useState(true);
 
   const handleConnectionSuccess = (connectionData) => {
     setDatabaseConnection(connectionData);
@@ -155,103 +156,94 @@ function App() {
             />
           )}
 
-          {/* Paso 4: Chatbot */}
+          {/* Paso 4: Chatbot - Pantalla Completa */}
           {schema && selectedModel && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Chat Principal */}
-              <div className="lg:col-span-2">
-                <Chatbot
-                  databaseConnection={databaseConnection}
-                  schema={schema}
-                  selectedModel={selectedModel}
-                />
-              </div>
+            <>
+              {/* Chatbot Principal - Full Width */}
+              <Chatbot
+                databaseConnection={databaseConnection}
+                schema={schema}
+                selectedModel={selectedModel}
+                onDisconnect={() => {
+                  setDatabaseConnection(null);
+                  setSchema(null);
+                  setSelectedModel("");
+                  setActiveStep(1);
+                }}
+              />
 
-              {/* Panel de Información */}
-              <div className="space-y-4">
+              {/* Paneles de Información - Debajo del Chat */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
                 {/* Estado Actual */}
-                <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg p-6 border border-gray-200/50">
-                  <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    <span className="text-2xl">📊</span>
+                <div className="bg-white/80 backdrop-blur-sm rounded-lg shadow-md p-4 border border-gray-200/50">
+                  <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2 text-sm">
+                    <span className="text-xl">📊</span>
                     Estado Actual
                   </h3>
-                  <div className="space-y-3 text-sm">
-                    <div className="flex justify-between items-center p-2 bg-gray-50 rounded-lg">
-                      <span className="text-gray-600">Base de Datos:</span>
-                      <span className="font-medium text-blue-600 break-all text-right ml-2">
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                      <span className="text-gray-600">BD:</span>
+                      <span className="font-medium text-blue-600 truncate ml-2">
                         {databaseConnection?.database}
                       </span>
                     </div>
-                    <div className="flex justify-between items-center p-2 bg-gray-50 rounded-lg">
+                    <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
                       <span className="text-gray-600">Tipo:</span>
                       <span className="font-medium text-green-600">
                         {databaseConnection?.type}
                       </span>
                     </div>
-                    <div className="flex justify-between items-center p-2 bg-gray-50 rounded-lg">
+                    <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
                       <span className="text-gray-600">Tablas:</span>
                       <span className="font-medium text-purple-600">
                         {schema?.tables?.length || 0}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center p-2 bg-gray-50 rounded-lg">
-                      <span className="text-gray-600">Modelo IA:</span>
-                      <span className="font-medium text-xs text-orange-600 break-all text-right ml-2">
-                        {selectedModel}
                       </span>
                     </div>
                   </div>
                 </div>
 
                 {/* Ejemplos de Consultas */}
-                <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg p-6 border border-gray-200/50">
-                  <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    <span className="text-2xl">💡</span>
+                <div className="bg-white/80 backdrop-blur-sm rounded-lg shadow-md p-4 border border-gray-200/50">
+                  <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2 text-sm">
+                    <span className="text-xl">💡</span>
                     Ejemplos de Consultas
                   </h3>
-                  <div className="space-y-2 text-sm text-gray-600">
-                    <div className="p-3 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg border-l-4 border-blue-400">
-                      "¿Cuáles son las mejores notas?"
+                  <div className="space-y-1.5 text-xs text-gray-600">
+                    <div className="p-2 bg-gradient-to-r from-blue-50 to-blue-100 rounded border-l-2 border-blue-400">
+                      "¿Mejores notas?"
                     </div>
-                    <div className="p-3 bg-gradient-to-r from-green-50 to-green-100 rounded-lg border-l-4 border-green-400">
-                      "Muestra todos los estudiantes activos"
+                    <div className="p-2 bg-gradient-to-r from-green-50 to-green-100 rounded border-l-2 border-green-400">
+                      "Estudiantes activos"
                     </div>
-                    <div className="p-3 bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg border-l-4 border-purple-400">
-                      "Dame el promedio de ventas por mes"
-                    </div>
-                    <div className="p-3 bg-gradient-to-r from-orange-50 to-orange-100 rounded-lg border-l-4 border-orange-400">
-                      "¿Cuántos usuarios hay en cada categoría?"
+                    <div className="p-2 bg-gradient-to-r from-purple-50 to-purple-100 rounded border-l-2 border-purple-400">
+                      "Promedio de ventas"
                     </div>
                   </div>
                 </div>
 
                 {/* Tips */}
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-xl p-6 border border-blue-200/50">
-                  <h3 className="font-semibold text-blue-800 mb-4 flex items-center gap-2">
-                    <span className="text-2xl">🚀</span>
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg p-4 border border-blue-200/50">
+                  <h3 className="font-semibold text-blue-800 mb-3 flex items-center gap-2 text-sm">
+                    <span className="text-xl">🚀</span>
                     Consejos
                   </h3>
-                  <ul className="space-y-2 text-sm text-blue-700">
+                  <ul className="space-y-1.5 text-xs text-blue-700">
                     <li className="flex items-start gap-2">
-                      <span className="text-blue-500 mt-1 flex-shrink-0">•</span>
-                      <span>Usa preguntas naturales y específicas</span>
+                      <span className="text-blue-500 mt-0.5">•</span>
+                      <span>Preguntas naturales</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-blue-500 mt-1 flex-shrink-0">•</span>
-                      <span>Menciona nombres de tablas si las conoces</span>
+                      <span className="text-blue-500 mt-0.5">•</span>
+                      <span>Menciona tablas</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-blue-500 mt-1 flex-shrink-0">•</span>
-                      <span>Pide ordenamiento (mejores, peores, top 10)</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-blue-500 mt-1 flex-shrink-0">•</span>
-                      <span>Usa fechas y rangos para filtrar datos</span>
+                      <span className="text-blue-500 mt-0.5">•</span>
+                      <span>Usa ordenamiento</span>
                     </li>
                   </ul>
                 </div>
               </div>
-            </div>
+            </>
           )}
         </div>
 

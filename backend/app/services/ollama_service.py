@@ -50,15 +50,16 @@ class OllamaService:
                                 message: str, 
                                 model: str, 
                                 schema: DatabaseSchema,
-                                sample_data: Dict[str, list] = None) -> Dict[str, Any]:
+                                sample_data: Dict[str, list] = None,
+                                data_profile: Dict[str, Any] = None) -> Dict[str, Any]:
         """Generar consulta SQL usando Ollama con contexto mejorado de la BD"""
         try:
             print(f"🔍 [DEBUG] Generando SQL para: {message}")
             print(f"🤖 [DEBUG] Usando modelo: {model}")
             print(f"📊 [DEBUG] Base de datos: {schema.database_name}")
             
-            # Usar prompt simple y directo para mejor compatibilidad
-            prompt = self._create_simple_sql_prompt(schema, message)
+            # Usar prompt enriquecido con perfil de datos
+            prompt = self._create_simple_sql_prompt(schema, message, data_profile)
             
             print(f"📝 [DEBUG] Longitud del prompt: {len(prompt)} caracteres")
             
@@ -324,35 +325,121 @@ EXPLICACIÓN: [explicación corta]
 
 Respuesta:"""
     
-    def _create_simple_sql_prompt(self, schema: DatabaseSchema, user_message: str) -> str:
-        """Crear prompt muy simple y directo"""
+    def _create_simple_sql_prompt(self, schema: DatabaseSchema, user_message: str, data_profile: Dict[str, Any] = None) -> str:
+        """Crear prompt enriquecido con información detallada del esquema y valores reales"""
         
-        # Información básica del esquema
-        schema_info = f"Base de datos: {schema.database_name}\n\nTablas disponibles:\n"
-        
-        for table in schema.tables:
-            schema_info += f"\nTabla '{table.table_name}':\n"
-            for col in table.columns:
-                schema_info += f"  - {col['name']} ({col['type']})"
-                if col['name'] in table.primary_keys:
-                    schema_info += " [PK]"
-                schema_info += "\n"
-            
-            if table.foreign_keys:
-                for fk in table.foreign_keys:
-                    schema_info += f"  - {fk['column']} -> {fk['referenced_table']}.{fk['referenced_column']}\n"
-        
-        return f"""{schema_info}
+        # Encabezado con información de la base de datos
+        schema_info = f"""# 🗄️ BASE DE DATOS: {schema.database_name}
 
-Pregunta: {user_message}
+## 📋 ESQUEMA COMPLETO CON VALORES REALES
 
-Genera una consulta SQL SELECT para responder esta pregunta.
-Usa solo los nombres de tablas y columnas mostrados arriba.
-Responde en este formato exacto:
+ATENCIÓN: Usa SOLO los nombres exactos de tablas, columnas y valores mostrados aquí.
 
-SQL: SELECT ...
-EXPLICACIÓN: Esta consulta...
 """
+        
+        # Información detallada por tabla
+        for table in schema.tables:
+            schema_info += f"\n### 📊 TABLA: `{table.table_name}`\n"
+            
+            # Obtener perfil de la tabla si está disponible
+            table_profile = None
+            if data_profile and "tables" in data_profile:
+                table_profile = data_profile["tables"].get(table.table_name, {})
+            
+            # Mostrar número de filas si está disponible
+            if table_profile and "row_count" in table_profile:
+                schema_info += f"  Total de registros: {table_profile['row_count']}\n"
+            
+            schema_info += "\n**COLUMNAS:**\n"
+            
+            # Columnas con información detallada
+            for col in table.columns:
+                col_name = col['name']
+                col_type = col['type']
+                
+                # Construir información de la columna
+                col_info = f"  • `{col_name}` ({col_type})"
+                
+                # Indicadores de restricciones
+                if col_name in table.primary_keys:
+                    col_info += " [PRIMARY KEY]"
+                if not col['nullable']:
+                    col_info += " [NOT NULL]"
+                if col.get('default'):
+                    col_info += f" [DEFAULT: {col['default']}]"
+                
+                schema_info += col_info + "\n"
+                
+                # IMPORTANTE: Agregar valores permitidos si existen en el perfil
+                if table_profile and "columns_profile" in table_profile:
+                    col_profile = table_profile["columns_profile"].get(col_name)
+                    if col_profile:
+                        if col_profile.get("unique_values"):
+                            values = col_profile["unique_values"]
+                            # Formatear valores según el tipo
+                            formatted_values = []
+                            for v in values:
+                                if isinstance(v, str):
+                                    formatted_values.append(f"'{v}'")
+                                else:
+                                    formatted_values.append(str(v))
+                            
+                            schema_info += f"    ⚠️  VALORES PERMITIDOS: {', '.join(formatted_values)}\n"
+                            
+                            # Mostrar distribución si hay pocos valores
+                            if len(values) <= 10 and col_profile.get("value_distribution"):
+                                schema_info += "    📊 Distribución: "
+                                dist_items = []
+                                for val, count in col_profile["value_distribution"].items():
+                                    dist_items.append(f"{val}({count})")
+                                schema_info += ", ".join(dist_items[:5]) + "\n"
+                        
+                        elif col_profile.get("sample_values"):
+                            samples = col_profile["sample_values"]
+                            formatted_samples = []
+                            for v in samples:
+                                if isinstance(v, str):
+                                    formatted_samples.append(f"'{v}'")
+                                else:
+                                    formatted_samples.append(str(v))
+                            schema_info += f"    💡 Ejemplos: {', '.join(formatted_samples)}\n"
+            
+            # Relaciones (Foreign Keys)
+            if table.foreign_keys:
+                schema_info += "\n**RELACIONES (Foreign Keys):**\n"
+                for fk in table.foreign_keys:
+                    schema_info += f"  • `{fk['column']}` → `{fk['referenced_table']}.{fk['referenced_column']}`\n"
+            
+            schema_info += "\n" + "─" * 70 + "\n"
+        
+        # Instrucciones mejoradas para el modelo
+        prompt = f"""{schema_info}
+
+## 🎯 INSTRUCCIONES CRÍTICAS:
+
+1. **USA VALORES EXACTOS**: Si una columna tiene "VALORES PERMITIDOS" especificados, úsalos TAL CUAL están escritos
+2. **NOMBRES EXACTOS**: Usa los nombres de tablas y columnas exactamente como se muestran arriba
+3. **TIPOS DE DATOS**: Respeta los tipos de datos al construir condiciones WHERE
+4. **RELACIONES**: Usa las Foreign Keys mostradas para hacer JOINs correctos
+5. **SOLO SELECT**: Genera únicamente consultas SELECT, nunca INSERT/UPDATE/DELETE
+
+## 💬 PREGUNTA DEL USUARIO:
+{user_message}
+
+## 📝 TU RESPUESTA (usa este formato EXACTO):
+
+SQL: [escribe aquí la consulta SELECT]
+EXPLICACIÓN: [explica brevemente qué hace la consulta]
+
+## 🚨 REGLAS IMPORTANTES:
+- Si una columna tiene "VALORES PERMITIDOS", usa EXACTAMENTE esos valores (no inventes valores alternativos)
+- Si necesitas filtrar por una columna categórica, verifica primero si hay valores permitidos listados
+- Para hacer JOIN entre tablas, usa las relaciones Foreign Keys mostradas
+- Si la pregunta es ambigua, genera la consulta más lógica basándote en el esquema
+- Si hay vistas (VIEW), puedes usarlas directamente en lugar de hacer JOINs complejos
+"""
+        
+        return prompt
     
     def _validate_sql_query(self, sql_query: str, schema: DatabaseSchema) -> Dict[str, Any]:
         """Validar consulta SQL contra el esquema"""

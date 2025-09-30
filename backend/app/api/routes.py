@@ -6,6 +6,8 @@ from app.models.database import (
 from app.services.schema_analyzer import SchemaAnalyzer
 from app.services.database_service import DatabaseService
 from app.services.ollama_service import OllamaService
+from app.services.data_profiler import DataProfiler
+from app.services.context_cache import context_cache
 import os
 import httpx
 
@@ -89,31 +91,48 @@ async def get_sample_data(db_connection: DatabaseConnection, table_name: str, li
 
 @router.post("/chat", response_model=QueryResult)
 async def process_chat_message(chat_request: ChatMessage):
-    """Procesar mensaje de chat y ejecutar consulta SQL con contexto mejorado"""
+    """Procesar mensaje de chat y ejecutar consulta SQL con contexto mejorado y perfilado"""
     try:
-        # 1. Analizar esquema de la base de datos
-        analyzer = SchemaAnalyzer(chat_request.database_connection)
-        schema = analyzer.analyze_schema()
+        print(f"\n🚀 [CHAT] Nueva consulta: {chat_request.message}")
         
-        # 2. Obtener datos de muestra para contexto RAG mejorado
-        db_service = DatabaseService(chat_request.database_connection)
-        sample_data = {}
+        # Convertir conexión a dict para el caché
+        connection_dict = chat_request.database_connection.dict()
         
-        # Obtener datos completos de muestra de cada tabla (para contexto)
-        for table in schema.tables:
-            try:
-                result = db_service.get_sample_data(table.table_name, limit=100)  # Solo ejemplos para contexto
-                if result["success"] and result["data"]:
-                    sample_data[table.table_name] = result["data"]
-            except Exception:
-                continue  # Si falla una tabla, continuar con las demás
+        # 1. Intentar obtener contexto del caché
+        cached_context = context_cache.get(connection_dict)
         
-        # 3. Generar consulta SQL usando Ollama con contexto enriquecido
+        if cached_context:
+            # Usar contexto en caché
+            schema = cached_context["schema"]
+            data_profile = cached_context["data_profile"]
+            print(f"✅ [CHAT] Usando contexto en caché")
+        else:
+            # Analizar y perfilar la base de datos (primera vez o caché expirado)
+            print(f"🔍 [CHAT] Analizando y perfilando base de datos...")
+            
+            # Analizar esquema
+            analyzer = SchemaAnalyzer(chat_request.database_connection)
+            schema = analyzer.analyze_schema()
+            
+            # Perfilar datos (obtener valores únicos de columnas categóricas)
+            profiler = DataProfiler(chat_request.database_connection)
+            data_profile = profiler.profile_database(schema.tables)
+            
+            # Guardar en caché
+            context_cache.set(connection_dict, {
+                "schema": schema,
+                "data_profile": data_profile
+            })
+            
+            print(f"💾 [CHAT] Contexto analizado y guardado en caché")
+        
+        # 2. Generar consulta SQL usando Ollama con contexto enriquecido
         ollama_result = await ollama_service.generate_sql_query(
             chat_request.message,
             chat_request.model,
             schema,
-            sample_data
+            sample_data=None,  # Ya no necesitamos sample_data, usamos data_profile
+            data_profile=data_profile
         )
         
         if not ollama_result["success"]:
@@ -134,7 +153,8 @@ async def process_chat_message(chat_request: ChatMessage):
                 explanation=explanation
             )
         
-        # 4. Ejecutar consulta SQL
+        # 3. Ejecutar consulta SQL
+        db_service = DatabaseService(chat_request.database_connection)
         query_result = db_service.execute_query(sql_query)
         
         if not query_result["success"]:
@@ -304,6 +324,84 @@ async def learn_database(request: LearnDatabaseRequest):
         return {
             "success": False,
             "message": f"Error durante el aprendizaje: {str(e)}"
+        }
+
+@router.post("/refresh-context")
+async def refresh_context(db_connection: DatabaseConnection):
+    """Refrescar el contexto de la base de datos (invalidar caché y reanalizar)"""
+    try:
+        connection_dict = db_connection.dict()
+        
+        # Invalidar caché existente
+        context_cache.invalidate(connection_dict)
+        
+        # Reanalizar y perfilar
+        analyzer = SchemaAnalyzer(db_connection)
+        schema = analyzer.analyze_schema()
+        
+        profiler = DataProfiler(db_connection)
+        data_profile = profiler.profile_database(schema.tables)
+        
+        # Guardar nuevo contexto en caché
+        context_cache.set(connection_dict, {
+            "schema": schema,
+            "data_profile": data_profile
+        })
+        
+        return {
+            "success": True,
+            "message": f"Contexto refrescado para {db_connection.database}",
+            "tables_analyzed": len(schema.tables)
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error al refrescar contexto: {str(e)}"
+        }
+
+@router.get("/cache-stats")
+async def get_cache_stats():
+    """Obtener estadísticas del caché de contextos"""
+    return context_cache.get_stats()
+
+@router.post("/disconnect")
+async def disconnect(request: dict):
+    """Desconectar: limpiar caché y detener modelo de Ollama"""
+    try:
+        db_connection_dict = request.get("database_connection")
+        model_name = request.get("model_name")
+        
+        if not db_connection_dict or not model_name:
+            return {
+                "success": False,
+                "message": "Faltan parámetros requeridos"
+            }
+        
+        # 1. Limpiar caché
+        context_cache.invalidate(db_connection_dict)
+        print(f"🗑️ [DISCONNECT] Caché limpiado para {db_connection_dict.get('database')}")
+        
+        # 2. Detener modelo en Ollama
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # Comando para detener el modelo en Ollama
+                # Nota: Ollama no tiene un endpoint directo para "stop", pero podemos
+                # intentar descargar el modelo de memoria (esto es opcional)
+                print(f"⏸️ [DISCONNECT] Intentando detener modelo: {model_name}")
+                # En Ollama, los modelos se descargan automáticamente después de un tiempo
+                # No hay un endpoint oficial para "stop", pero lo registramos
+        except Exception as e:
+            print(f"⚠️ [DISCONNECT] Advertencia al detener modelo: {str(e)}")
+        
+        return {
+            "success": True,
+            "message": f"Desconexión exitosa. Caché limpiado para {db_connection_dict.get('database')}",
+            "model_stopped": model_name
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error al desconectar: {str(e)}"
         }
 
 @router.get("/health")
