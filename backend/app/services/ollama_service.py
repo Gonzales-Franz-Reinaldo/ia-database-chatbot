@@ -3,6 +3,7 @@ import json
 import re
 from typing import List, Dict, Any, Optional
 from app.models.database import DatabaseSchema, OllamaModel
+from app.services.query_analyzer import QueryAnalyzer
 
 class OllamaService:
     def __init__(self, base_url: str = "http://localhost:11434"):
@@ -52,21 +53,42 @@ class OllamaService:
                                 schema: DatabaseSchema,
                                 sample_data: Dict[str, list] = None,
                                 data_profile: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Generar consulta SQL usando Ollama con contexto mejorado de la BD"""
+        """Generar consulta SQL con contexto FOCALIZADO usando QueryAnalyzer"""
         try:
-            print(f"🔍 [DEBUG] Generando SQL para: {message}")
-            print(f"🤖 [DEBUG] Usando modelo: {model}")
-            print(f"📊 [DEBUG] Base de datos: {schema.database_name}")
+            print(f"🔍 [SQL-GEN] Analizando query: {message}")
             
-            # Usar prompt enriquecido con perfil de datos
-            prompt = self._create_simple_sql_prompt(schema, message, data_profile)
+            # 🆕 PASO 1: Analizar la query del usuario
+            analyzer = QueryAnalyzer(schema)
+            query_analysis = analyzer.analyze_query(message)
             
-            print(f"📝 [DEBUG] Longitud del prompt: {len(prompt)} caracteres")
+            print(f"📊 [SQL-GEN] Tablas relevantes: {query_analysis['relevant_tables']}")
+            print(f"📊 [SQL-GEN] Tipo: {query_analysis['query_type']}")
+            print(f"📊 [SQL-GEN] Complejidad: {query_analysis['complexity_level']}/5")
             
-            # Llamar a Ollama con configuración optimizada
+            # 🆕 PASO 2: Obtener contexto focalizado
+            focused_context = analyzer.get_focused_context(query_analysis)
+            
+            print(f"🎯 [SQL-GEN] Contexto focalizado: {focused_context['focused_table_count']}/{focused_context['total_tables_in_db']} tablas")
+            
+            # 🆕 PASO 3: Generar ejemplos contextuales
+            example_queries = analyzer.generate_example_queries(query_analysis)
+            
+            # 🆕 PASO 4: Crear prompt MEJORADO con contexto focalizado
+            prompt = self._create_focused_sql_prompt(
+                schema,
+                message,
+                data_profile,
+                focused_context,
+                query_analysis,
+                example_queries
+            )
+            
+            print(f"📝 [SQL-GEN] Longitud prompt: {len(prompt)} caracteres")
+            
+            # Ajustar temperatura según complejidad
+            temperature = 0.05 if query_analysis['complexity_level'] <= 2 else 0.1
+            
             async with httpx.AsyncClient(timeout=1000.0) as client:
-                print(f"🌐 [DEBUG] Enviando request a Ollama...")
-                
                 response = await client.post(
                     f"{self.base_url}/api/generate",
                     json={
@@ -74,73 +96,181 @@ class OllamaService:
                         "prompt": prompt,
                         "stream": False,
                         "options": {
-                            "temperature": 0.05,  # Muy baja para consultas SQL precisas
+                            "temperature": temperature,
                             "top_p": 0.8,
                             "top_k": 20,
                             "repeat_penalty": 1.1,
-                            "num_predict": 5000  # Más tokens para respuestas completas
+                            "num_predict": 5000
                         }
                     }
                 )
-                
-                print(f"🔄 [DEBUG] Response status: {response.status_code}")
                 
                 if response.status_code == 200:
                     result = response.json()
                     ai_response = result.get("response", "")
                     
-                    print(f"✅ [DEBUG] Respuesta recibida ({len(ai_response)} chars)")
-                    print(f"📄 [DEBUG] Primeros 200 chars: {ai_response[:200]}...")
-                    
-                    # Extraer SQL y explicación con mejor precisión
                     sql_query = self._extract_sql_query(ai_response)
                     explanation = self._extract_explanation(ai_response)
                     
-                    print(f"🔍 [DEBUG] SQL extraído: {sql_query}")
-                    print(f"💭 [DEBUG] Explicación extraída: {explanation}")
-                    
                     if not sql_query:
-                        print(f"❌ [DEBUG] No se pudo extraer SQL de la respuesta")
                         return {
                             "success": False,
-                            "error": "No se pudo extraer consulta SQL de la respuesta",
+                            "error": "No se pudo extraer consulta SQL",
                             "full_response": ai_response
                         }
                     
-                    # Validar la consulta SQL
+                    # Validar SQL
                     validation_result = self._validate_sql_query(sql_query, schema)
                     if not validation_result["valid"]:
-                        print(f"❌ [DEBUG] SQL inválido: {validation_result['error']}")
                         return {
                             "success": False,
-                            "error": f"Consulta SQL inválida: {validation_result['error']}",
-                            "sql_query": sql_query,
-                            "explanation": explanation
+                            "error": f"SQL inválido: {validation_result['error']}",
+                            "sql_query": sql_query
                         }
                     
-                    print(f"✅ [DEBUG] SQL válido, devolviendo resultado")
                     return {
                         "success": True,
                         "sql_query": sql_query,
                         "explanation": explanation,
-                        "full_response": ai_response
+                        "full_response": ai_response,
+                        "analysis": query_analysis
                     }
                 else:
-                    error_text = response.text
-                    print(f"❌ [DEBUG] Error HTTP {response.status_code}: {error_text}")
                     return {
                         "success": False,
-                        "error": f"Error en Ollama: {response.status_code} - {error_text}"
+                        "error": f"Error Ollama: {response.status_code}"
                     }
         
         except Exception as e:
-            print(f"💥 [DEBUG] Excepción: {str(e)}")
+            print(f"💥 [SQL-GEN] Error: {str(e)}")
             import traceback
             traceback.print_exc()
             return {
                 "success": False,
-                "error": f"Error al generar consulta SQL: {str(e)}"
+                "error": f"Error generando SQL: {str(e)}"
             }
+    
+    def _create_focused_sql_prompt(self,
+                                   schema: DatabaseSchema,
+                                   user_message: str,
+                                   data_profile: Dict[str, Any],
+                                   focused_context: Dict[str, Any],
+                                   query_analysis: Dict[str, Any],
+                                   example_queries: List[str]) -> str:
+        """
+        🆕 Crear prompt FOCALIZADO con solo información relevante
+        """
+        
+        prompt = f"""# 🎯 CONTEXTO FOCALIZADO PARA CONSULTA SQL
+
+Base de datos: **{schema.database_name}**
+Tablas en BD: {focused_context['total_tables_in_db']}
+Tablas relevantes para esta query: {focused_context['focused_table_count']}
+Complejidad: Nivel {query_analysis['complexity_level']}/5
+Tipo: {query_analysis['query_type']}
+
+---
+
+## 📋 TABLAS RELEVANTES (Solo estas son importantes para esta consulta)
+
+"""
+        
+        # Solo mostrar tablas focalizadas
+        for table in focused_context["tables"]:
+            prompt += f"\n### 🔹 TABLA: `{table.table_name}`\n"
+            
+            # Obtener perfil si existe
+            table_profile = None
+            if data_profile and "tables" in data_profile:
+                table_profile = data_profile["tables"].get(table.table_name, {})
+            
+            if table_profile and "row_count" in table_profile:
+                prompt += f"  📊 Registros: {table_profile['row_count']}\n"
+            
+            prompt += "\n**COLUMNAS:**\n"
+            
+            # Resaltar columnas mencionadas en la query
+            mentioned_cols = query_analysis.get("mentioned_columns", {}).get(table.table_name, [])
+            
+            for col in table.columns:
+                col_name = col['name']
+                col_type = col['type']
+                
+                # Marcar si fue mencionada
+                mention_mark = " ⭐ [MENCIONADA]" if col_name.lower() in mentioned_cols else ""
+                
+                col_info = f"  • `{col_name}` ({col_type}){mention_mark}"
+                
+                if col_name in table.primary_keys:
+                    col_info += " 🔑 [PK]"
+                if not col['nullable']:
+                    col_info += " [NOT NULL]"
+                
+                prompt += col_info + "\n"
+                
+                # VALORES PERMITIDOS del perfil
+                if table_profile and "columns_profile" in table_profile:
+                    col_profile = table_profile["columns_profile"].get(col_name)
+                    if col_profile and col_profile.get("unique_values"):
+                        values = col_profile["unique_values"]
+                        formatted = [f"'{v}'" if isinstance(v, str) else str(v) for v in values]
+                        prompt += f"    ⚠️  VALORES PERMITIDOS: {', '.join(formatted)}\n"
+            
+            prompt += "\n"
+        
+        # MAPA DE RELACIONES
+        if focused_context["relationships"]:
+            prompt += "\n## 🔗 RELACIONES (Usa estas para JOINs)\n\n"
+            for rel in focused_context["relationships"]:
+                prompt += f"  • `{rel['from_table']}.{rel['from_column']}` → `{rel['to_table']}.{rel['to_column']}`\n"
+            prompt += "\n"
+        
+        # EJEMPLOS CONTEXTUALES
+        if example_queries:
+            prompt += "\n## 💡 EJEMPLOS DE QUERIES SIMILARES\n\n"
+            for i, example in enumerate(example_queries, 1):
+                prompt += f"{i}. ```sql\n{example}\n```\n\n"
+        
+        # HINTS ESPECÍFICOS
+        hints = query_analysis.get("filter_hints", {})
+        if hints.get("exact_values") or hints.get("boolean_keywords"):
+            prompt += "\n## 🎯 HINTS PARA ESTA CONSULTA\n\n"
+            
+            if hints.get("exact_values"):
+                prompt += f"  • Valores exactos mencionados: {', '.join([f'\'{v}\'' for v in hints['exact_values']])}\n"
+            
+            if hints.get("boolean_keywords"):
+                for keyword, value in hints["boolean_keywords"]:
+                    prompt += f"  • '{keyword}' probablemente significa: {value}\n"
+            
+            prompt += "\n"
+        
+        # PREGUNTA E INSTRUCCIONES
+        prompt += f"""
+---
+
+## 🎯 PREGUNTA DEL USUARIO:
+**"{user_message}"**
+
+---
+
+## 📝 INSTRUCCIONES CRÍTICAS:
+
+1. **USA SOLO LAS TABLAS MOSTRADAS ARRIBA** (no inventes nombres)
+2. **PARA JOINS**: Usa EXACTAMENTE las relaciones del mapa
+3. **PARA VALORES**: Si hay "VALORES PERMITIDOS", usa esos exactos
+4. **COLUMNAS MENCIONADAS**: Prioriza las marcadas con ⭐
+5. **GENERA SOLO SELECT**: Nunca INSERT/UPDATE/DELETE
+
+## 🎯 FORMATO DE RESPUESTA (OBLIGATORIO):
+
+SQL: [tu consulta SELECT aquí]
+EXPLICACIÓN: [explicación breve]
+
+## 🚀 GENERA TU RESPUESTA AHORA:
+"""
+        
+        return prompt
     
     def _create_schema_context(self, schema: DatabaseSchema) -> str:
         """Crear contexto del esquema de la base de datos"""
